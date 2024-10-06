@@ -15,8 +15,6 @@ This is my **second** project in Zig, _ever_.
 
 My first project was `Hello World`.
 
-- _Yeah, everything is one file - it's fine_
-
 ---
 
 # Test Your TTY
@@ -56,8 +54,8 @@ Results are for terminal size 160x48 after running 666 frames of the Doom Fire s
 # TODO
 
 - [ ] Improve error handling
-- [ ] Improve code structure / refactor
-- [ ] Update terminal size on resize
+- [x] Improve code structure / refactor
+- [x] Update terminal size on resize
 
 # Credits
 
