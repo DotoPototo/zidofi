@@ -16,6 +16,7 @@ var random: std.rand.Random = undefined;
 var term_size: TermSize = .{ .height = 0, .width = 0 };
 var stdout: std.fs.File.Writer = undefined;
 var endless_mode: bool = false;
+var is_monitoring_term_size: bool = false;
 
 // MARK: Main
 
@@ -36,15 +37,13 @@ fn complete() void {
 fn initialise() !void {
     try checkArgs();
 
-    try initSignalHandler();
+    try initSignalHandlers();
     initWriters();
     initTermSize();
     initColors();
     try setupRandom();
 
-    altScreenOn();
-    try writeHeader();
-    try outputTerminalSize();
+    try runIntroScreen();
     try testTerminalColors();
     try testLigatures();
 }
@@ -102,20 +101,38 @@ fn checkArgs() !void {
 
 // MARK: Signal Handling
 
-fn initSignalHandler() !void {
+fn sigintHandler(sig: c_int) callconv(.C) void {
+    std.debug.print("\nReceived SIGINT {d} (Ctrl-C). Exiting...\n", .{sig});
+    resetScreen();
+    altScreenOff();
+    std.posix.exit(0);
+}
+
+fn sigwinchHandler(_: c_int) callconv(.C) void {
+    if (is_monitoring_term_size) {
+        initTermSize();
+        displayIntroScreen() catch {};
+        print("\x1b[38;5;226mPress Enter to continue..." ++ reset_color);
+    }
+}
+
+fn initSignalHandlers() !void {
+    // CTRL+C handler
     const sigint = std.posix.SIG.INT;
     try std.posix.sigaction(sigint, &std.posix.Sigaction{
         .handler = .{ .handler = sigintHandler },
         .mask = std.posix.empty_sigset,
         .flags = 0,
     }, null);
-}
 
-fn sigintHandler(sig: c_int) callconv(.C) void {
-    std.debug.print("\nReceived SIGINT {d} (Ctrl-C). Exiting...\n", .{sig});
-    resetScreen();
-    altScreenOff();
-    std.posix.exit(0);
+    // Terminal resize handler
+    _ = try stdout.write("\x1b[?2048h");
+    const sigwinch = std.posix.SIG.WINCH;
+    try std.posix.sigaction(sigwinch, &std.posix.Sigaction{
+        .handler = .{ .handler = sigwinchHandler },
+        .mask = std.posix.empty_sigset,
+        .flags = 0,
+    }, null);
 }
 
 // MARK: Writers
@@ -256,6 +273,23 @@ fn outputTerminalSize() !void {
     try flushWriterBuffer();
 }
 
+// MARK: Intro Screen
+
+fn runIntroScreen() !void {
+    is_monitoring_term_size = true;
+    defer is_monitoring_term_size = false;
+
+    try displayIntroScreen();
+    try pressEnterToContinue();
+}
+
+fn displayIntroScreen() !void {
+    resetScreen();
+    altScreenOn();
+    try writeHeader();
+    try outputTerminalSize();
+}
+
 // MARK: Colour Setup
 
 const MAX_COLOR = 256;
@@ -362,6 +396,9 @@ fn printColorBlock(color: usize) !void {
 }
 
 fn testTerminalColors() !void {
+    resetScreen();
+    altScreenOn();
+
     try writeBufferedFrame("System colors:\n");
     for (0..16) |i| {
         try printColorBlock(i);
