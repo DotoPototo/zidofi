@@ -47,12 +47,14 @@ Results are for terminal size 160x48 after running 666 frames of the Doom Fire s
 
 | Terminal         | OS                                   | FPS | Notes             | Date       | App Version |
 | ---------------- | ------------------------------------ | --- | ----------------- | ---------- | ----------- |
-| Windows Terminal | Windows 11 WSL2 (Ubuntu 22.04.5 LTS) | 220 |                   | 2024-10-02 | 0.1         |
-| iTerm2           | Senoma 14.5                          | 72  |                   | 2024-10-02 | 0.1         |
+| Windows Terminal | Windows 11 WSL2 (Ubuntu 22.04.5 LTS) | 240 |                   | 2024-10-02 | 0.1         |
+| iTerm2           | Senoma 14.5                          | 57  |                   | 2024-10-02 | 0.1         |
 | Terminal.app     | Senoma 14.5                          | N/A | Too slow to count | 2024-10-02 | 0.1         |
 
 # TODO
 
+- [x] Add memory usage to output
+- [ ] Add windows support
 - [ ] Improve error handling
 - [x] Improve code structure / refactor
 - [x] Update terminal size on resize

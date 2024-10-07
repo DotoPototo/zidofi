@@ -79,7 +79,7 @@ fn getTermSize(file: std.fs.File) !TermSize {
 
 pub fn outputTerminalSize() !void {
     try writers.writeFormattedBufferedFrame("Terminal size: {d}x{d}\n\n", .{ term_size.width, term_size.height });
-    if (term_size.width != 160 and term_size.height != 48) {
+    if (term_size.width != 160 or term_size.height != 48) {
         try writers.writeBufferedFrame("The recommended terminal size is 160x48 for the DOOM fire test\n\n");
     }
     try writers.flushWriterBuffer();

@@ -1,6 +1,7 @@
 const std = @import("std");
 const writers = @import("writers.zig");
 const term = @import("term.zig");
+const system = @import("system.zig");
 const colours = @import("colours.zig");
 const text = @import("text.zig");
 const doomFire = @import("doomfire.zig");
@@ -24,6 +25,7 @@ pub fn main() !void {
 
 fn complete() void {
     term.altScreenOff();
+    system.stopSystemTrackers();
 }
 
 // MARK: Initialisation
@@ -32,6 +34,8 @@ fn initialise() !void {
     try checkArgs();
 
     try initSignalHandlers();
+    try system.initSystemTracker();
+
     writers.initWriters();
     term.initTermSize();
     try setupRandom();
@@ -117,6 +121,7 @@ fn displayIntroScreen() !void {
     term.altScreenOn();
     try writeHeader();
     try term.outputTerminalSize();
+    try system.printSystemUsage(true);
 }
 
 pub fn writeHeader() !void {

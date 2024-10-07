@@ -1,5 +1,6 @@
 const std = @import("std");
 const app = @import("main.zig");
+const system = @import("system.zig");
 const colours = @import("colours.zig");
 const writers = @import("writers.zig");
 const term = @import("term.zig");
@@ -202,5 +203,6 @@ pub fn run() !void {
     }
     try writers.stdout.print("\x1b[38;5;70mAverage FPS: {d:.2}{s}\n", .{ fps, term.reset_color });
     try writers.stdout.print("Visual results may vary depending on terminal refresh capabilities\n\n", .{});
+    try system.printSystemUsage(false);
     try term.pressEnterToContinue();
 }

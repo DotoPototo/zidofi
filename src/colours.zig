@@ -9,10 +9,17 @@ const MAX_COLOR = 256;
 pub var foreground_colors: [MAX_COLOR][]u8 = undefined;
 pub var background_colors: [MAX_COLOR][]u8 = undefined;
 
-pub fn printColorBlock(color: usize) !void {
-    // These are two characters wide
-    try writers.writeFormattedBufferedFrame("\x1b[48;5;{d}m  \x1b[0m", .{color});
+// MARK: Colour Setup
+
+pub fn initColors() void {
+    var color_index: u16 = 0;
+    while (color_index < MAX_COLOR) : (color_index += 1) {
+        foreground_colors[color_index] = std.fmt.allocPrint(app.ALLOCATOR, "{s}38;5;{d}m", .{ term.csi, color_index }) catch unreachable;
+        background_colors[color_index] = std.fmt.allocPrint(app.ALLOCATOR, "{s}48;5;{d}m", .{ term.csi, color_index }) catch unreachable;
+    }
 }
+
+// MARK: Test Functions
 
 pub fn testTerminalColors() !void {
     term.resetScreen();
@@ -56,47 +63,38 @@ pub fn testTerminalColors() !void {
     try drawTrueColorGradient();
 
     // Print error-dithered truecolor gradient
-    try drawSmoothGradient();
+    try drawDitheredGradient();
 
     try term.pressEnterToContinue();
 }
 
-// MARK: Colour Setup
+// MARK: Color Printing Blocks
 
-pub fn initColors() void {
-    var color_index: u16 = 0;
-    while (color_index < MAX_COLOR) : (color_index += 1) {
-        foreground_colors[color_index] = std.fmt.allocPrint(app.ALLOCATOR, "{s}38;5;{d}m", .{ term.csi, color_index }) catch unreachable;
-        background_colors[color_index] = std.fmt.allocPrint(app.ALLOCATOR, "{s}48;5;{d}m", .{ term.csi, color_index }) catch unreachable;
-    }
+pub fn printColorBlock(color: usize) !void {
+    try writers.writeFormattedBufferedFrame("\x1b[48;5;{d}m  \x1b[0m", .{color}); // Two characters wide
+}
+
+fn printSmoothColorBlock(r: u8, g: u8, b: u8) !void {
+    try writers.writeFormattedBufferedFrame("\x1b[38;2;{d};{d};{d}m{s}\x1b[0m", .{ r, g, b, FULL_PIXEL_CHAR }); // One character wide
 }
 
 // MARK: True Color Gradient
 
-fn printTrueColorBlock(r: u8, g: u8, b: u8) !void {
-    // These are two characters wide
-    try writers.writeFormattedBufferedFrame("\x1b[48;2;{d};{d};{d}m  \x1b[0m", .{ r, g, b });
-}
-
 fn drawTrueColorGradient() !void {
     try writers.writeBufferedFrame("Truecolor gradient:\n");
-    const width = term.term_size.width / 2;
+    const width = term.term_size.width;
     for (0..width) |i| {
         const x: f32 = @as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(width - 1));
         const r: u8 = @intFromFloat(255.0 * (1.0 - x));
         const g: u8 = @intFromFloat(255.0 * (1.0 - @abs(x - 0.5) * 2.0));
         const b: u8 = @intFromFloat(255.0 * x);
-        try printTrueColorBlock(r, g, b);
+        try printSmoothColorBlock(r, g, b);
     }
     try writers.writeBufferedFrame("\n\n");
     try writers.flushWriterBuffer();
 }
 
 // MARK: Error Diffusion Dithering Gradient
-
-fn printSmoothTrueColorBlock(r: u8, g: u8, b: u8) !void {
-    try writers.writeFormattedBufferedFrame("\x1b[38;2;{d};{d};{d}m{s}\x1b[0m", .{ r, g, b, FULL_PIXEL_CHAR });
-}
 
 fn applyDithering(value: f32, err: *f32) u8 {
     const new_value = value + err.*;
@@ -132,7 +130,7 @@ fn calculateColor(t: f32) struct { r: f32, g: f32, b: f32 } {
     }
 }
 
-fn drawSmoothGradient() !void {
+fn drawDitheredGradient() !void {
     try writers.writeBufferedFrame("Error diffusion dithered truecolor gradient:\n");
     const width = term.term_size.width;
 
@@ -148,7 +146,7 @@ fn drawSmoothGradient() !void {
         const g = applyDithering(color.g, &errors[1]);
         const b = applyDithering(color.b, &errors[2]);
 
-        try printSmoothTrueColorBlock(r, g, b);
+        try printSmoothColorBlock(r, g, b);
     }
 
     try writers.writeBufferedFrame("\n\n");
