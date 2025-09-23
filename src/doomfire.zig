@@ -15,12 +15,12 @@ fn printFirePixel(fg_color: usize, bg_color: usize) !void {
 // MARK: Fire Palette
 
 pub fn printFirePalette() !void {
-    term.resetScreen();
-    term.altScreenOn();
+    try term.resetScreen();
+    try term.altScreenOn();
 
     try app.writeHeader();
     try writers.printCentered("\x1b[38;5;208mThe following screen will display the DOOM fire algorithm - please wait for it to finish!\n\n");
-    writers.print(term.reset_color);
+    try writers.print(term.reset_color);
 
     // Print fire palette
     try writers.writeBufferedFrame("Fire palette:\n");
@@ -87,7 +87,7 @@ fn freeDisplayBuffer() void {
 }
 
 fn printDisplayBuffer() !void {
-    writers.print(display_buffer[0..display_buffer_length]);
+    try writers.print(display_buffer[0..display_buffer_length]);
     resetDisplayBuffer();
 }
 
@@ -146,7 +146,7 @@ pub fn run() !void {
     }
 
     // Ensure terminal is in correct mode
-    term.altScreenOn();
+    try term.altScreenOn();
 
     // Setup initial frame
     const init_frame = std.fmt.allocPrint(app.ALLOCATOR, "{s}{s}{s}", .{ term.cursor_home, colours.background_colors[0], colours.foreground_colors[0] }) catch unreachable;
@@ -194,8 +194,8 @@ pub fn run() !void {
     }
 
     // Reset terminal and display results
-    term.resetScreen();
-    term.altScreenOn();
+    try term.resetScreen();
+    try term.altScreenOn();
     const elapsed = timer.lap();
     const fps = @as(f64, @floatFromInt(loop_count)) / (@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_s);
     if (fps < 5 or fps > 1000) {

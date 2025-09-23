@@ -33,7 +33,7 @@ fn systemTrackerThread(memory_tracker: *PeakMemoryTracker, cpu_tracker: *PeakCPU
         const memory_info = try getMemoryUsage();
         memory_tracker.updatePeaks(memory_info);
         try cpu_tracker.updatePeakCPUUsage();
-        std.time.sleep(10 * std.time.ns_per_ms); // Check every 10ms
+        std.Thread.sleep(10 * std.time.ns_per_ms); // Check every 10ms
     }
 }
 
@@ -133,10 +133,10 @@ fn getLinuxMemoryUsage() !MemoryInfo {
     const bytes_read = try file.readAll(&buffer);
     const content = buffer[0..bytes_read];
 
-    var iterator = mem.tokenize(u8, content, " ");
+    var iterator = mem.tokenizeScalar(u8, content, ' ');
     const rss_pages = try std.fmt.parseInt(usize, iterator.next().?, 10);
 
-    const page_size = std.mem.page_size;
+    const page_size = std.heap.pageSize();
 
     return MemoryInfo{
         .physical_memory = rss_pages * page_size,
@@ -238,10 +238,10 @@ fn getLinuxCPUInfo() !CPUInfo {
     const bytes_read = try file.readAll(&buffer);
     const content = buffer[0..bytes_read];
 
-    var lines = mem.split(u8, content, "\n");
+    var lines = mem.splitScalar(u8, content, '\n');
     const cpu_line = lines.next() orelse return error.NoCPUInfo;
 
-    var values = mem.tokenize(u8, cpu_line, " ");
+    var values = mem.tokenizeScalar(u8, cpu_line, ' ');
     _ = values.next(); // Skip "cpu" prefix
 
     const user = try std.fmt.parseInt(u64, values.next() orelse return error.InvalidCPUInfo, 10);

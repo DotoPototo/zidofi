@@ -22,8 +22,8 @@ pub fn initColors() void {
 // MARK: Test Functions
 
 pub fn testTerminalColors() !void {
-    term.resetScreen();
-    term.altScreenOn();
+    try term.resetScreen();
+    try term.altScreenOn();
 
     try app.writeHeader();
     try writers.printCentered("Terminal colours and gradients test:\n\n");

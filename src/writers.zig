@@ -2,57 +2,43 @@ const std = @import("std");
 const app = @import("main.zig");
 const term = @import("term.zig");
 
-pub var stdout: std.fs.File.Writer = undefined;
-
 const BUFFER_SIZE: usize = 4096;
-const StdOutWriter = @TypeOf(std.io.getStdOut().writer());
-var buffered_writer: ?std.io.BufferedWriter(BUFFER_SIZE, StdOutWriter) = null;
 
-pub fn initWriters() void {
-    const stdout_writer = std.io.getStdOut().writer();
-    buffered_writer = std.io.bufferedWriter(stdout_writer);
-
-    stdout = std.io.getStdOut().writer();
-}
+var stdout_buffer: [BUFFER_SIZE]u8 = undefined;
+var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+pub const stdout: *std.Io.Writer = &stdout_writer.interface;
 
 // MARK: Writer
+pub fn print(s: []const u8) !void {
+    try stdout.writeAll(s);
+}
 
-pub fn print(s: []const u8) void {
-    const sz = stdout.write(s) catch unreachable;
-    if (sz == 0) {
-        return;
+pub fn printSpaces(count: usize) !void {
+    var buf: [64]u8 = undefined;
+    @memset(&buf, ' ');
+    var left = count;
+    while (left > 0) {
+        const n = @min(left, buf.len);
+        try stdout.writeAll(buf[0..n]);
+        left -= n;
     }
-    return;
 }
 
 pub fn printCentered(string: []const u8) !void {
     const padding = if (term.term_size.width > string.len) (term.term_size.width - string.len) / 2 else 0;
-    try stdout.writeByteNTimes(' ', padding);
+    try printSpaces(padding);
     try stdout.print("{s}\n", .{string});
 }
 
 // MARK: Buffered Writer
-
 pub fn writeBufferedFrame(data: []const u8) !void {
-    if (buffered_writer) |*bw| {
-        bw.writer().print("{s}", .{data}) catch unreachable;
-    } else {
-        return error.BufferedWriterNotInitialised;
-    }
+    try stdout.print("{s}", .{data});
 }
 
 pub fn writeFormattedBufferedFrame(comptime fmt: []const u8, args: anytype) !void {
-    if (buffered_writer) |*bw| {
-        try bw.writer().print(fmt, args);
-    } else {
-        return error.BufferedWriterNotInitialised;
-    }
+    try stdout.print(fmt, args);
 }
 
 pub fn flushWriterBuffer() !void {
-    if (buffered_writer) |*bw| {
-        try bw.flush();
-    } else {
-        return error.BufferedWriterNotInitialised;
-    }
+    try stdout.flush();
 }

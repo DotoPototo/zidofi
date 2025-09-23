@@ -22,39 +22,55 @@ pub const reset_color = csi ++ "0m";
 
 // MARK: Screen Functions
 
-pub fn altScreenOn() void {
-    writers.print(screen_buf_on ++ clear_screen ++ cursor_hide ++ cursor_home);
+pub fn altScreenOn() !void {
+    try writers.print(clear_screen ++ screen_buf_on ++ cursor_hide ++ cursor_home);
+    try writers.flushWriterBuffer();
 }
 
-pub fn altScreenOff() void {
-    writers.print(screen_buf_off ++ clear_screen ++ cursor_show ++ cursor_home);
+pub fn altScreenOff() !void {
+    try writers.print(clear_screen ++ screen_buf_off ++ cursor_show ++ cursor_home);
+    try writers.flushWriterBuffer();
 }
 
-pub fn resetScreen() void {
-    writers.print(reset_screen ++ clear_screen ++ cursor_home);
+pub fn resetScreen() !void {
+    try writers.print(reset_screen ++ clear_screen ++ cursor_home);
+    try writers.flushWriterBuffer();
 }
 
 pub fn pressEnterToContinue() !void {
-    writers.print("\x1b[38;5;226mPress Enter to continue..." ++ reset_color);
+    try writers.stdout.print(
+        "\x1b[38;5;226mPress Enter to continue...{s}",
+        .{reset_color},
+    );
+    try writers.flushWriterBuffer();
 
-    const stdin = std.io.getStdIn().reader();
+    var stdin_buffer: [128]u8 = undefined;
+    var stdin_reader = std.fs.File.stdin().reader(&stdin_buffer);
+    const reader: *std.Io.Reader = &stdin_reader.interface;
 
-    stdin.skipUntilDelimiterOrEof('\n') catch unreachable;
+    while (reader.takeDelimiterExclusive('\n')) |_| {
+        break;
+    } else |err| switch (err) {
+        error.EndOfStream => {},
+        error.StreamTooLong => {},
+        error.ReadFailed => return err,
+    }
 
-    writers.print("\n");
+    try writers.stdout.print("\n", .{});
+    try writers.flushWriterBuffer();
 }
 
 // MARK: Terminal Size
 
 pub fn initTermSize() void {
-    term_size = getTermSize(std.io.getStdOut()) catch |err| {
+    term_size = getTermSize(std.fs.File.stdout()) catch |err| {
         std.debug.print("Fatal: Unable to get terminal size: {s}\n", .{@errorName(err)});
         std.process.exit(1);
     };
 }
 
 fn getTermSize(file: std.fs.File) !TermSize {
-    var buf: std.posix.system.winsize = undefined;
+    var buf: std.posix.winsize = undefined;
 
     return block: {
         // Switch on the result of the ioctl call
@@ -68,8 +84,8 @@ fn getTermSize(file: std.fs.File) !TermSize {
         )) {
             // If the ioctl call was successful, break out of the block and return the terminal size
             .SUCCESS => break :block TermSize{
-                .width = buf.ws_col,
-                .height = buf.ws_row,
+                .width = buf.col,
+                .height = buf.row,
             },
             // If the ioctl call failed, return the error
             else => return error.IoctlError,

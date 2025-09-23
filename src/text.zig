@@ -3,8 +3,8 @@ const writers = @import("writers.zig");
 const term = @import("term.zig");
 
 pub fn testLigatures() !void {
-    term.resetScreen();
-    term.altScreenOn();
+    try term.resetScreen();
+    try term.altScreenOn();
     try app.writeHeader();
 
     try writers.printCentered("Terminal ligatures and special characters test:\n\n");

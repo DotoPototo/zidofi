@@ -45,19 +45,20 @@ zig build -Doptimize=ReleaseFast run -- --endless
 
 Results are for terminal size 160x48 after running 666 frames of the Doom Fire simulation.
 
-| Terminal         | OS                                   | FPS | Notes             | Date       | App Version |
-| ---------------- | ------------------------------------ | --- | ----------------- | ---------- | ----------- |
-| Windows Terminal | Windows 11 WSL2 (Ubuntu 22.04.5 LTS) | 240 |                   | 2024-10-02 | 0.1         |
-| iTerm2           | Senoma 14.5                          | 57  |                   | 2024-10-02 | 0.1         |
-| Terminal.app     | Senoma 14.5                          | N/A | Too slow to count | 2024-10-02 | 0.1         |
+| Terminal         | OS                                   | FPS | Notes             | Date       | App Version | Zig Version |
+| ---------------- | ------------------------------------ | --- | ----------------- | ---------- | ----------- | ----------- |
+| Windows Terminal | Windows 11 WSL2 (Ubuntu 22.04.5 LTS) | 240 |                   | 2024-10-02 | 0.0.1       | 0.13.0      |
+| Windows Terminal | Windows 11 WSL2 (Ubuntu 24.04.3 LTS) | 165 |                   | 2025-09-23 | 0.0.2       | 0.15.1      |
+| iTerm2           | Senoma 14.5                          | 57  |                   | 2024-10-02 | 0.0.1       | 0.13.0      |
+| Terminal.app     | Senoma 14.5                          | N/A | Too slow to count | 2024-10-02 | 0.0.1       | 0.13.0      |
 
 # TODO
 
 - [x] Add memory usage to output
-- [ ] Add windows support
-- [ ] Improve error handling
+- [x] Add windows support
 - [x] Improve code structure / refactor
 - [x] Update terminal size on resize
+- [ ] Improve error handling
 
 # Credits
 
