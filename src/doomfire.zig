@@ -5,7 +5,9 @@ const colours = @import("colours.zig");
 const writers = @import("writers.zig");
 const term = @import("term.zig");
 
-const FIRE_COLOURS = [_]u8{ 0, 233, 234, 52, 53, 88, 89, 94, 95, 96, 130, 131, 132, 133, 172, 214, 215, 220, 220, 221, 3, 226, 227, 230, 195, 230 };
+const FIRE_COLOURS = [_]u8{ 16, 233, 234, 52, 53, 88, 89, 94, 95, 96, 130, 131, 132, 133, 172, 214, 215, 220, 220, 221, 3, 226, 227, 230, 195, 230 };
+const FIRE_BLACK: u8 = 0;
+const FIRE_WHITE: u8 = FIRE_COLOURS.len - 1;
 const PIXEL_CHAR = "▀";
 
 fn printFirePixel(fg_color: usize, bg_color: usize) !void {
@@ -61,7 +63,8 @@ var display_buffer_length: u32 = 0;
 
 fn initDisplayBuffer() !void {
     const pixel_character_size = PIXEL_CHAR.len;
-    const pixel_color_size = colours.foreground_colors[0].len + colours.background_colors[0].len;
+    const base_palette_index = FIRE_COLOURS[FIRE_BLACK];
+    const pixel_color_size = colours.foreground_colors[base_palette_index].len + colours.background_colors[base_palette_index].len;
     const pixel_size = pixel_character_size + pixel_color_size;
     const screen_size: u64 = pixel_size * term.term_size.width * term.term_size.height;
     const overflow_size: u64 = pixel_character_size * term.term_size.width;
@@ -128,10 +131,6 @@ pub fn run() !void {
     const FIRE_SIZE: u16 = FIRE_WIDTH * FIRE_HEIGHT;
     const FIRE_LAST_ROW: u16 = (FIRE_HEIGHT - 1) * FIRE_WIDTH;
 
-    // Doom fire colours
-    const FIRE_BLACK: u8 = 0;
-    const FIRE_WHITE: u8 = FIRE_COLOURS.len - 1; // Index of last colour aka white
-
     // Doom fire buffers
     var fire_buffer: []u8 = try app.ALLOCATOR.alloc(u8, FIRE_SIZE);
     defer app.ALLOCATOR.free(fire_buffer);
@@ -149,11 +148,11 @@ pub fn run() !void {
     try term.altScreenOn();
 
     // Setup initial frame
-    const init_frame = std.fmt.allocPrint(app.ALLOCATOR, "{s}{s}{s}", .{ term.cursor_home, colours.background_colors[0], colours.foreground_colors[0] }) catch unreachable;
+    const init_frame = std.fmt.allocPrint(app.ALLOCATOR, "{s}{s}{s}", .{ term.cursor_home, colours.background_colors[FIRE_COLOURS[FIRE_BLACK]], colours.foreground_colors[FIRE_COLOURS[FIRE_BLACK]] }) catch unreachable;
     defer app.ALLOCATOR.free(init_frame);
 
-    var prev_pixel_foreground: u8 = 0;
-    var prev_pixel_background: u8 = 0;
+    var prev_pixel_foreground: u8 = 255;
+    var prev_pixel_background: u8 = 255;
 
     var timer = try std.time.Timer.start();
 
@@ -167,6 +166,10 @@ pub fn run() !void {
 
         resetDisplayBuffer();
         addToDisplayBuffer(init_frame);
+
+        // Set the first pixel to be an 'invalid' colour to force set the colour
+        prev_pixel_foreground = 255;
+        prev_pixel_background = 255;
 
         // Display the fire
         var frame_y: u16 = 0;
