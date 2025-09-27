@@ -47,6 +47,7 @@ Results are for terminal size 160x48 after running 666 frames of the Doom Fire s
 
 | Terminal         | OS                                   | FPS | Notes             | Date       | App Version | Zig Version |
 | ---------------- | ------------------------------------ | --- | ----------------- | ---------- | ----------- | ----------- |
+| Ghostty          | Sequoia 15.6.1                       | 322 |                   | 2025-09-27 | 0.0.2       | 0.15.1      |
 | Windows Terminal | Windows 11 WSL2 (Ubuntu 22.04.5 LTS) | 240 |                   | 2024-10-02 | 0.0.1       | 0.13.0      |
 | Windows Terminal | Windows 11 WSL2 (Ubuntu 24.04.3 LTS) | 165 |                   | 2025-09-23 | 0.0.2       | 0.15.1      |
 | iTerm2           | Senoma 14.5                          | 57  |                   | 2024-10-02 | 0.0.1       | 0.13.0      |
