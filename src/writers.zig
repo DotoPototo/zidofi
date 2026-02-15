@@ -1,5 +1,4 @@
 const std = @import("std");
-const app = @import("main.zig");
 const term = @import("term.zig");
 
 const BUFFER_SIZE: usize = 4096;

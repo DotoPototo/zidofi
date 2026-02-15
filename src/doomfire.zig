@@ -1,5 +1,5 @@
 const std = @import("std");
-const app = @import("main.zig");
+const state = @import("state.zig");
 const system = @import("system.zig");
 const colours = @import("colours.zig");
 const writers = @import("writers.zig");
@@ -20,7 +20,7 @@ pub fn printFirePalette() !void {
     try term.resetScreen();
     try term.altScreenOn();
 
-    try app.writeHeader();
+    try term.writeHeader();
     try writers.printCentered("\x1b[38;5;208mThe following screen will display the DOOM fire algorithm - please wait for it to finish!\n\n");
     try writers.print(term.reset_color);
 
@@ -51,7 +51,7 @@ pub fn printFirePalette() !void {
     try writers.writeBufferedFrame("\n\n");
     try writers.flushWriterBuffer();
 
-    if (app.shouldQuit()) return;
+    if (state.shouldQuit()) return;
     try term.pressEnterToContinue();
 }
 
@@ -88,7 +88,7 @@ const DisplayBuffer = struct {
     }
 };
 
-fn createDisplayBuffer() !DisplayBuffer {
+fn createDisplayBuffer(allocator: std.mem.Allocator) !DisplayBuffer {
     const pixel_character_size = PIXEL_CHAR.len;
     const base_palette_index = FIRE_COLOURS[FIRE_BLACK];
     const pixel_color_size = colours.foreground_colors[base_palette_index].len + colours.background_colors[base_palette_index].len;
@@ -97,28 +97,28 @@ fn createDisplayBuffer() !DisplayBuffer {
     const overflow_size: u64 = pixel_character_size * term.term_size.width;
     const buffer_size: u64 = screen_size + overflow_size;
 
-    return DisplayBuffer.init(app.ALLOCATOR, buffer_size * 2);
+    return DisplayBuffer.init(allocator, buffer_size * 2);
 }
 
 // MARK: Fire Algorithm
 
-fn doFire(FIRE_WIDTH: u32, FIRE_HEIGHT: u32, fire_buffer: *[]u8) void {
+fn doFire(FIRE_WIDTH: u32, FIRE_HEIGHT: u32, fire_buffer: *[]u8, random: std.Random) void {
     var fire_x: u32 = 0;
     while (fire_x < FIRE_WIDTH) : (fire_x += 1) {
         var fire_y: u32 = 1;
         while (fire_y < FIRE_HEIGHT) : (fire_y += 1) {
             const source_index: u32 = fire_y * FIRE_WIDTH + fire_x;
-            spreadFire(source_index, FIRE_WIDTH, fire_buffer);
+            spreadFire(source_index, FIRE_WIDTH, fire_buffer, random);
         }
     }
 }
 
-fn spreadFire(source_index: u32, FIRE_WIDTH: u32, fire_buffer: *[]u8) void {
+fn spreadFire(source_index: u32, FIRE_WIDTH: u32, fire_buffer: *[]u8, random: std.Random) void {
     const pixel = fire_buffer.*[source_index];
     if (pixel == 0) {
         fire_buffer.*[source_index - FIRE_WIDTH] = 0;
     } else {
-        const random_index: u8 = app.random.intRangeAtMost(u8, 0, 3);
+        const random_index: u8 = random.intRangeAtMost(u8, 0, 3);
         var destination: u32 = source_index - random_index + 1;
         if (destination < FIRE_WIDTH) {
             destination = FIRE_WIDTH;
@@ -127,9 +127,9 @@ fn spreadFire(source_index: u32, FIRE_WIDTH: u32, fire_buffer: *[]u8) void {
     }
 }
 
-pub fn run() !void {
-    var display = try createDisplayBuffer();
-    defer display.deinit(app.ALLOCATOR);
+pub fn run(allocator: std.mem.Allocator, random: std.Random) !void {
+    var display = try createDisplayBuffer(allocator);
+    defer display.deinit(allocator);
 
     // Doom fire sizes
     const FIRE_WIDTH: u32 = term.term_size.width;
@@ -138,8 +138,8 @@ pub fn run() !void {
     const FIRE_LAST_ROW: u32 = (FIRE_HEIGHT - 1) * FIRE_WIDTH;
 
     // Doom fire buffers
-    var fire_buffer: []u8 = try app.ALLOCATOR.alloc(u8, FIRE_SIZE);
-    defer app.ALLOCATOR.free(fire_buffer);
+    var fire_buffer: []u8 = try allocator.alloc(u8, FIRE_SIZE);
+    defer allocator.free(fire_buffer);
 
     // Initialize fire buffer (defaults to black)
     @memset(fire_buffer, FIRE_BLACK);
@@ -154,8 +154,8 @@ pub fn run() !void {
     try term.altScreenOn();
 
     // Setup initial frame
-    const init_frame = try std.fmt.allocPrint(app.ALLOCATOR, "{s}{s}{s}", .{ term.cursor_home, colours.background_colors[FIRE_COLOURS[FIRE_BLACK]], colours.foreground_colors[FIRE_COLOURS[FIRE_BLACK]] });
-    defer app.ALLOCATOR.free(init_frame);
+    const init_frame = try std.fmt.allocPrint(allocator, "{s}{s}{s}", .{ term.cursor_home, colours.background_colors[FIRE_COLOURS[FIRE_BLACK]], colours.foreground_colors[FIRE_COLOURS[FIRE_BLACK]] });
+    defer allocator.free(init_frame);
 
     var prev_pixel_foreground: u8 = 255;
     var prev_pixel_background: u8 = 255;
@@ -164,12 +164,12 @@ pub fn run() !void {
 
     var loop_count: u32 = 0;
     var loop_limit: u32 = 666;
-    if (app.endless_mode) {
+    if (state.endless_mode) {
         loop_limit = std.math.maxInt(u32);
     }
     while (loop_count < loop_limit) : (loop_count += 1) {
-        if (app.shouldQuit()) break;
-        doFire(FIRE_WIDTH, FIRE_HEIGHT, &fire_buffer);
+        if (state.shouldQuit()) break;
+        doFire(FIRE_WIDTH, FIRE_HEIGHT, &fire_buffer, random);
 
         display.reset();
         display.append(init_frame);
@@ -203,12 +203,16 @@ pub fn run() !void {
         try display.flush();
     }
 
-    if (app.shouldQuit()) return;
+    if (state.shouldQuit()) return;
 
     // Reset terminal and display results
     try term.resetScreen();
     try term.altScreenOn();
     const elapsed = timer.lap();
+    if (elapsed == 0) {
+        try writers.stdout.print("Results do not seem accurate - elapsed time was zero\n", .{});
+        return;
+    }
     const fps = @as(f64, @floatFromInt(loop_count)) / (@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_s);
     if (fps < 5 or fps > 1000) {
         try writers.stdout.print("Results do not seem accurate - test may not have ran correctly\n", .{});
@@ -216,6 +220,6 @@ pub fn run() !void {
     try writers.stdout.print("\x1b[38;5;70mAverage FPS: {d:.2}{s}\n", .{ fps, term.reset_color });
     try writers.stdout.print("Visual results may vary depending on terminal refresh capabilities\n\n", .{});
     try system.printSystemUsage(false);
-    if (app.shouldQuit()) return;
+    if (state.shouldQuit()) return;
     try term.pressEnterToContinue();
 }

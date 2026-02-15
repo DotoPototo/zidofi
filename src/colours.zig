@@ -1,32 +1,32 @@
 const std = @import("std");
-const app = @import("main.zig");
+const state = @import("state.zig");
 const writers = @import("writers.zig");
 const term = @import("term.zig");
 
 const FULL_PIXEL_CHAR = "█";
 const MAX_COLOR = 256;
 
-pub var foreground_colors: [MAX_COLOR][]u8 = undefined;
-pub var background_colors: [MAX_COLOR][]u8 = undefined;
+pub var foreground_colors: [MAX_COLOR][]const u8 = .{""} ** MAX_COLOR;
+pub var background_colors: [MAX_COLOR][]const u8 = .{""} ** MAX_COLOR;
 var colors_initialized: u16 = 0;
 
 // MARK: Colour Setup
 
-pub fn initColors() !void {
-    errdefer deinitColors();
+pub fn initColors(allocator: std.mem.Allocator) !void {
+    errdefer deinitColors(allocator);
     while (colors_initialized < MAX_COLOR) {
-        foreground_colors[colors_initialized] = try std.fmt.allocPrint(app.ALLOCATOR, "{s}38;5;{d}m", .{ term.csi, colors_initialized });
-        errdefer app.ALLOCATOR.free(foreground_colors[colors_initialized]);
-        background_colors[colors_initialized] = try std.fmt.allocPrint(app.ALLOCATOR, "{s}48;5;{d}m", .{ term.csi, colors_initialized });
+        foreground_colors[colors_initialized] = try std.fmt.allocPrint(allocator, "{s}38;5;{d}m", .{ term.csi, colors_initialized });
+        errdefer allocator.free(foreground_colors[colors_initialized]);
+        background_colors[colors_initialized] = try std.fmt.allocPrint(allocator, "{s}48;5;{d}m", .{ term.csi, colors_initialized });
         colors_initialized += 1;
     }
 }
 
-pub fn deinitColors() void {
+pub fn deinitColors(allocator: std.mem.Allocator) void {
     var i: u16 = 0;
     while (i < colors_initialized) : (i += 1) {
-        app.ALLOCATOR.free(foreground_colors[i]);
-        app.ALLOCATOR.free(background_colors[i]);
+        allocator.free(foreground_colors[i]);
+        allocator.free(background_colors[i]);
     }
     colors_initialized = 0;
 }
@@ -37,7 +37,7 @@ pub fn testTerminalColors() !void {
     try term.resetScreen();
     try term.altScreenOn();
 
-    try app.writeHeader();
+    try term.writeHeader();
     try writers.printCentered("Terminal colours and gradients test:\n\n");
 
     try writers.writeBufferedFrame("System colors:\n");
@@ -77,7 +77,7 @@ pub fn testTerminalColors() !void {
     // Print error-dithered truecolor gradient
     try drawDitheredGradient();
 
-    if (app.shouldQuit()) return;
+    if (state.shouldQuit()) return;
     try term.pressEnterToContinue();
 }
 
@@ -96,6 +96,7 @@ fn printSmoothColorBlock(r: u8, g: u8, b: u8) !void {
 fn drawTrueColorGradient() !void {
     try writers.writeBufferedFrame("Truecolor gradient:\n");
     const width = term.term_size.width;
+    if (width <= 1) return;
     for (0..width) |i| {
         const x: f32 = @as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(width - 1));
         const r: u8 = @intFromFloat(255.0 * (1.0 - x));
@@ -146,6 +147,7 @@ fn calculateColor(t: f32) struct { r: f32, g: f32, b: f32 } {
 fn drawDitheredGradient() !void {
     try writers.writeBufferedFrame("Error diffusion dithered truecolor gradient:\n");
     const width = term.term_size.width;
+    if (width <= 1) return;
 
     var errors = [_]f32{0} ** 3;
 

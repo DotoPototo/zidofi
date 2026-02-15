@@ -1,5 +1,6 @@
 const std = @import("std");
 const writers = @import("writers.zig");
+const state = @import("state.zig");
 
 pub const TermSize = struct {
     width: u16,
@@ -88,7 +89,10 @@ fn getTermSize(file: std.fs.File) !TermSize {
                 .height = buf.row,
             },
             // If the ioctl call failed, return the error
-            else => return error.IoctlError,
+            else => |errno| {
+                std.log.err("ioctl TIOCGWINSZ failed with errno {}", .{@intFromEnum(errno)});
+                return error.IoctlError;
+            },
         }
     };
 }
@@ -99,4 +103,40 @@ pub fn outputTerminalSize() !void {
         try writers.writeBufferedFrame("The recommended terminal size is 160x48 for the DOOM fire test\n\n");
     }
     try writers.flushWriterBuffer();
+}
+
+// MARK: Header
+
+const APP_VERSION = "0.1";
+
+pub fn writeHeader() !void {
+    const headerWidth: u16 = 40;
+    const halfTermWidth: u16 = term_size.width / 2;
+    const headerOffset: u16 = halfTermWidth - headerWidth / 2;
+
+    try writers.writeBufferedFrame("\x1b[38;5;129m"); // Purple
+    try writers.writeBufferedFrame("\n");
+    try writers.printSpaces(headerOffset);
+    try writers.writeBufferedFrame("███████╗██╗██████╗  ██████╗ ███████╗██╗\n");
+    try writers.printSpaces(headerOffset);
+    try writers.writeBufferedFrame("╚══███╔╝██║██╔══██╗██╔═══██╗██╔════╝██║\n");
+    try writers.printSpaces(headerOffset);
+    try writers.writeBufferedFrame("  ███╔╝ ██║██║  ██║██║   ██║█████╗  ██║\n");
+    try writers.printSpaces(headerOffset);
+    try writers.writeBufferedFrame(" ███╔╝  ██║██║  ██║██║   ██║██╔══╝  ██║\n");
+    try writers.printSpaces(headerOffset);
+    try writers.writeBufferedFrame("███████╗██║██████╔╝╚██████╔╝██║     ██║\n");
+    try writers.printSpaces(headerOffset);
+    try writers.writeBufferedFrame("╚══════╝╚═╝╚═════╝  ╚═════╝ ╚═╝     ╚═╝\n");
+    try writers.writeBufferedFrame("\n\n");
+    try writers.flushWriterBuffer();
+
+    try writers.printCentered("🔥 Zig Doom Fire - Terminal Tester & Benchmark Tool v" ++ APP_VERSION ++ "🔥\n\n");
+    if (state.endless_mode) {
+        try writers.print("\x1b[38;5;196m"); // Red
+        try writers.printCentered("Endless mode enabled - press Ctrl+C to exit\n\n");
+    }
+
+    // reset the color
+    try writers.print(reset_color);
 }

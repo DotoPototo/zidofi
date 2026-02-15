@@ -1,11 +1,11 @@
-const app = @import("main.zig");
+const state = @import("state.zig");
 const writers = @import("writers.zig");
 const term = @import("term.zig");
 
 pub fn testLigatures() !void {
     try term.resetScreen();
     try term.altScreenOn();
-    try app.writeHeader();
+    try term.writeHeader();
 
     try writers.printCentered("Terminal ligatures and special characters test:\n\n");
 
@@ -40,6 +40,6 @@ pub fn testLigatures() !void {
     }
     try writers.flushWriterBuffer();
 
-    if (app.shouldQuit()) return;
+    if (state.shouldQuit()) return;
     try term.pressEnterToContinue();
 }

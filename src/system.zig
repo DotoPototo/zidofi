@@ -127,8 +127,15 @@ fn getLinuxMemoryUsage() !MemoryInfo {
     const content = buffer[0..bytes_read];
 
     var iterator = mem.tokenizeScalar(u8, content, ' ');
-    _ = iterator.next() orelse return error.InvalidMemoryInfo; // skip 'size' (total virtual memory)
-    const rss_pages = try std.fmt.parseInt(usize, iterator.next() orelse return error.InvalidMemoryInfo, 10);
+    _ = iterator.next() orelse {
+        std.log.err("Failed to parse /proc/self/statm: missing 'size' field", .{});
+        return error.InvalidMemoryInfo;
+    };
+    const rss_str = iterator.next() orelse {
+        std.log.err("Failed to parse /proc/self/statm: missing 'rss' field", .{});
+        return error.InvalidMemoryInfo;
+    };
+    const rss_pages = try std.fmt.parseInt(usize, rss_str, 10);
 
     const page_size = std.heap.pageSize();
 
@@ -209,6 +216,7 @@ fn getDarwinCPUInfo() !CPUInfo {
     );
 
     if (kern_return != c.KERN_SUCCESS) {
+        std.log.err("host_statistics failed with kern_return code {}", .{kern_return});
         return error.FailedToGetCPUInfo;
     }
 
@@ -228,19 +236,34 @@ fn getLinuxCPUInfo() !CPUInfo {
     const content = buffer[0..bytes_read];
 
     var lines = mem.splitScalar(u8, content, '\n');
-    const cpu_line = lines.next() orelse return error.NoCPUInfo;
+    const cpu_line = lines.next() orelse {
+        std.log.err("Failed to parse /proc/stat: no lines found", .{});
+        return error.NoCPUInfo;
+    };
 
     var values = mem.tokenizeScalar(u8, cpu_line, ' ');
     _ = values.next(); // Skip "cpu" prefix
 
-    const user = try std.fmt.parseInt(u64, values.next() orelse return error.InvalidCPUInfo, 10);
-    const nice = try std.fmt.parseInt(u64, values.next() orelse return error.InvalidCPUInfo, 10);
-    const system = try std.fmt.parseInt(u64, values.next() orelse return error.InvalidCPUInfo, 10);
-    const idle = try std.fmt.parseInt(u64, values.next() orelse return error.InvalidCPUInfo, 10);
+    const user = try std.fmt.parseInt(u64, values.next() orelse {
+        std.log.err("Failed to parse /proc/stat: missing 'user' field", .{});
+        return error.InvalidCPUInfo;
+    }, 10);
+    const nice = try std.fmt.parseInt(u64, values.next() orelse {
+        std.log.err("Failed to parse /proc/stat: missing 'nice' field", .{});
+        return error.InvalidCPUInfo;
+    }, 10);
+    const system_val = try std.fmt.parseInt(u64, values.next() orelse {
+        std.log.err("Failed to parse /proc/stat: missing 'system' field", .{});
+        return error.InvalidCPUInfo;
+    }, 10);
+    const idle = try std.fmt.parseInt(u64, values.next() orelse {
+        std.log.err("Failed to parse /proc/stat: missing 'idle' field", .{});
+        return error.InvalidCPUInfo;
+    }, 10);
 
     return CPUInfo{
         .user = user + nice,
-        .system = system,
+        .system = system_val,
         .idle = idle,
     };
 }
