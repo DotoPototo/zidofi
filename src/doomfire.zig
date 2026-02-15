@@ -51,17 +51,44 @@ pub fn printFirePalette() !void {
     try writers.writeBufferedFrame("\n\n");
     try writers.flushWriterBuffer();
 
+    if (app.shouldQuit()) return;
     try term.pressEnterToContinue();
 }
 
 // MARK: Fire Display Buffer
 
-// TODO: Move these (doom fire struct?)
-var display_buffer: []u8 = undefined;
-var display_buffer_index: u32 = 0;
-var display_buffer_length: u32 = 0;
+const DisplayBuffer = struct {
+    buffer: []u8,
+    length: usize,
 
-fn initDisplayBuffer() !void {
+    fn init(allocator: std.mem.Allocator, size: usize) !DisplayBuffer {
+        return .{
+            .buffer = try allocator.alloc(u8, size),
+            .length = 0,
+        };
+    }
+
+    fn deinit(self: *DisplayBuffer, allocator: std.mem.Allocator) void {
+        allocator.free(self.buffer);
+    }
+
+    fn reset(self: *DisplayBuffer) void {
+        self.length = 0;
+    }
+
+    fn append(self: *DisplayBuffer, string: []const u8) void {
+        std.debug.assert(self.length + string.len <= self.buffer.len);
+        @memcpy(self.buffer[self.length .. self.length + string.len], string);
+        self.length += string.len;
+    }
+
+    fn flush(self: *DisplayBuffer) !void {
+        try writers.print(self.buffer[0..self.length]);
+        self.reset();
+    }
+};
+
+fn createDisplayBuffer() !DisplayBuffer {
     const pixel_character_size = PIXEL_CHAR.len;
     const base_palette_index = FIRE_COLOURS[FIRE_BLACK];
     const pixel_color_size = colours.foreground_colors[base_palette_index].len + colours.background_colors[base_palette_index].len;
@@ -70,50 +97,29 @@ fn initDisplayBuffer() !void {
     const overflow_size: u64 = pixel_character_size * term.term_size.width;
     const buffer_size: u64 = screen_size + overflow_size;
 
-    display_buffer = try app.ALLOCATOR.alloc(u8, buffer_size * 2);
-    resetDisplayBuffer();
-}
-
-fn resetDisplayBuffer() void {
-    display_buffer_index = 0;
-    display_buffer_length = 0;
-}
-
-fn addToDisplayBuffer(string: []const u8) void {
-    @memcpy(display_buffer[display_buffer_index .. display_buffer_index + string.len], string);
-    display_buffer_index += @intCast(string.len);
-    display_buffer_length += @intCast(string.len);
-}
-
-fn freeDisplayBuffer() void {
-    app.ALLOCATOR.free(display_buffer);
-}
-
-fn printDisplayBuffer() !void {
-    try writers.print(display_buffer[0..display_buffer_length]);
-    resetDisplayBuffer();
+    return DisplayBuffer.init(app.ALLOCATOR, buffer_size * 2);
 }
 
 // MARK: Fire Algorithm
 
-fn doFire(FIRE_WIDTH: u16, FIRE_HEIGHT: u16, fire_buffer: *[]u8) void {
-    var fire_x: u16 = 0;
+fn doFire(FIRE_WIDTH: u32, FIRE_HEIGHT: u32, fire_buffer: *[]u8) void {
+    var fire_x: u32 = 0;
     while (fire_x < FIRE_WIDTH) : (fire_x += 1) {
-        var fire_y: u16 = 1;
+        var fire_y: u32 = 1;
         while (fire_y < FIRE_HEIGHT) : (fire_y += 1) {
-            const source_index: u16 = fire_y * FIRE_WIDTH + fire_x;
+            const source_index: u32 = fire_y * FIRE_WIDTH + fire_x;
             spreadFire(source_index, FIRE_WIDTH, fire_buffer);
         }
     }
 }
 
-fn spreadFire(source_index: u16, FIRE_WIDTH: u16, fire_buffer: *[]u8) void {
+fn spreadFire(source_index: u32, FIRE_WIDTH: u32, fire_buffer: *[]u8) void {
     const pixel = fire_buffer.*[source_index];
     if (pixel == 0) {
         fire_buffer.*[source_index - FIRE_WIDTH] = 0;
     } else {
         const random_index: u8 = app.random.intRangeAtMost(u8, 0, 3);
-        var destination: u16 = source_index - random_index + 1;
+        var destination: u32 = source_index - random_index + 1;
         if (destination < FIRE_WIDTH) {
             destination = FIRE_WIDTH;
         }
@@ -122,14 +128,14 @@ fn spreadFire(source_index: u16, FIRE_WIDTH: u16, fire_buffer: *[]u8) void {
 }
 
 pub fn run() !void {
-    try initDisplayBuffer();
-    defer freeDisplayBuffer();
+    var display = try createDisplayBuffer();
+    defer display.deinit(app.ALLOCATOR);
 
     // Doom fire sizes
-    const FIRE_WIDTH: u16 = term.term_size.width;
-    const FIRE_HEIGHT: u16 = term.term_size.height * 2; // Double height due to half block characters
-    const FIRE_SIZE: u16 = FIRE_WIDTH * FIRE_HEIGHT;
-    const FIRE_LAST_ROW: u16 = (FIRE_HEIGHT - 1) * FIRE_WIDTH;
+    const FIRE_WIDTH: u32 = term.term_size.width;
+    const FIRE_HEIGHT: u32 = term.term_size.height * 2; // Double height due to half block characters
+    const FIRE_SIZE: u32 = FIRE_WIDTH * FIRE_HEIGHT;
+    const FIRE_LAST_ROW: u32 = (FIRE_HEIGHT - 1) * FIRE_WIDTH;
 
     // Doom fire buffers
     var fire_buffer: []u8 = try app.ALLOCATOR.alloc(u8, FIRE_SIZE);
@@ -139,7 +145,7 @@ pub fn run() !void {
     @memset(fire_buffer, FIRE_BLACK);
 
     // Last row of fire is white aka fire source
-    var buf_index: u16 = 0;
+    var buf_index: u32 = 0;
     while (buf_index < FIRE_WIDTH) : (buf_index += 1) {
         fire_buffer[FIRE_LAST_ROW + buf_index] = FIRE_WHITE;
     }
@@ -148,7 +154,7 @@ pub fn run() !void {
     try term.altScreenOn();
 
     // Setup initial frame
-    const init_frame = std.fmt.allocPrint(app.ALLOCATOR, "{s}{s}{s}", .{ term.cursor_home, colours.background_colors[FIRE_COLOURS[FIRE_BLACK]], colours.foreground_colors[FIRE_COLOURS[FIRE_BLACK]] }) catch unreachable;
+    const init_frame = try std.fmt.allocPrint(app.ALLOCATOR, "{s}{s}{s}", .{ term.cursor_home, colours.background_colors[FIRE_COLOURS[FIRE_BLACK]], colours.foreground_colors[FIRE_COLOURS[FIRE_BLACK]] });
     defer app.ALLOCATOR.free(init_frame);
 
     var prev_pixel_foreground: u8 = 255;
@@ -156,45 +162,48 @@ pub fn run() !void {
 
     var timer = try std.time.Timer.start();
 
-    var loop_count: u16 = 0;
-    var loop_limit: u16 = 666;
+    var loop_count: u32 = 0;
+    var loop_limit: u32 = 666;
     if (app.endless_mode) {
-        loop_limit = 65535;
+        loop_limit = std.math.maxInt(u32);
     }
     while (loop_count < loop_limit) : (loop_count += 1) {
+        if (app.shouldQuit()) break;
         doFire(FIRE_WIDTH, FIRE_HEIGHT, &fire_buffer);
 
-        resetDisplayBuffer();
-        addToDisplayBuffer(init_frame);
+        display.reset();
+        display.append(init_frame);
 
         // Set the first pixel to be an 'invalid' colour to force set the colour
         prev_pixel_foreground = 255;
         prev_pixel_background = 255;
 
         // Display the fire
-        var frame_y: u16 = 0;
+        var frame_y: u32 = 0;
         while (frame_y < FIRE_HEIGHT) : (frame_y += 2) {
-            var frame_x: u16 = 0;
+            var frame_x: u32 = 0;
             while (frame_x < FIRE_WIDTH) : (frame_x += 1) {
                 const pixel_foreground: u8 = fire_buffer[frame_y * FIRE_WIDTH + frame_x];
                 const pixel_background: u8 = fire_buffer[(frame_y + 1) * FIRE_WIDTH + frame_x];
 
                 // No need to re-add the same colour if it's already set
                 if (pixel_background != prev_pixel_background) {
-                    addToDisplayBuffer(colours.background_colors[FIRE_COLOURS[pixel_background]]);
+                    display.append(colours.background_colors[FIRE_COLOURS[pixel_background]]);
                 }
                 if (pixel_foreground != prev_pixel_foreground) {
-                    addToDisplayBuffer(colours.foreground_colors[FIRE_COLOURS[pixel_foreground]]);
+                    display.append(colours.foreground_colors[FIRE_COLOURS[pixel_foreground]]);
                 }
-                addToDisplayBuffer(PIXEL_CHAR);
+                display.append(PIXEL_CHAR);
 
                 prev_pixel_foreground = pixel_foreground;
                 prev_pixel_background = pixel_background;
             }
         }
 
-        try printDisplayBuffer();
+        try display.flush();
     }
+
+    if (app.shouldQuit()) return;
 
     // Reset terminal and display results
     try term.resetScreen();
@@ -207,5 +216,6 @@ pub fn run() !void {
     try writers.stdout.print("\x1b[38;5;70mAverage FPS: {d:.2}{s}\n", .{ fps, term.reset_color });
     try writers.stdout.print("Visual results may vary depending on terminal refresh capabilities\n\n", .{});
     try system.printSystemUsage(false);
+    if (app.shouldQuit()) return;
     try term.pressEnterToContinue();
 }

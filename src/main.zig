@@ -9,6 +9,11 @@ const doomFire = @import("doomfire.zig");
 pub const ALLOCATOR = std.heap.page_allocator;
 pub var endless_mode: bool = false;
 pub var random: std.Random = undefined;
+var quit_requested: std.atomic.Value(bool) = std.atomic.Value(bool).init(false);
+
+pub fn shouldQuit() bool {
+    return quit_requested.load(.acquire);
+}
 
 const APP_VERSION = "0.1";
 var is_monitoring_term_size: bool = false;
@@ -16,16 +21,19 @@ var is_monitoring_term_size: bool = false;
 // MARK: Main
 
 pub fn main() !void {
-    try initialise();
     defer complete() catch {};
+    try initialise();
 
+    if (shouldQuit()) return;
     try doomFire.printFirePalette();
+    if (shouldQuit()) return;
     try doomFire.run();
 }
 
 fn complete() !void {
     try term.altScreenOff();
     system.stopSystemTrackers();
+    colours.deinitColors();
 }
 
 // MARK: Initialisation
@@ -38,7 +46,7 @@ fn initialise() !void {
 
     term.initTermSize();
     try setupRandom();
-    colours.initColors();
+    try colours.initColors();
 
     try runIntroScreen();
     try colours.testTerminalColors();
@@ -55,11 +63,7 @@ fn setupRandom() !void {
 }
 
 fn checkArgs() !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    const allocator = gpa.allocator();
-    defer _ = gpa.deinit();
-
-    var args = try std.process.argsWithAllocator(allocator);
+    var args = try std.process.argsWithAllocator(ALLOCATOR);
     defer args.deinit();
 
     while (args.next()) |arg| {
@@ -71,13 +75,8 @@ fn checkArgs() !void {
 
 // MARK: Signal Handling
 
-fn sigintHandler(sig: c_int) callconv(.c) void {
-    _ = writers.stdout.print("\nReceived SIGINT {d} (Ctrl-C). Exiting...\n", .{sig}) catch {};
-    term.resetScreen() catch {};
-    term.altScreenOff() catch {};
-    _ = writers.stdout.writeAll("\x1b[?2049l") catch {};
-
-    std.posix.exit(0);
+fn sigintHandler(_: c_int) callconv(.c) void {
+    quit_requested.store(true, .release);
 }
 
 fn sigwinchHandler(_: c_int) callconv(.c) void {
@@ -115,6 +114,7 @@ fn runIntroScreen() !void {
     defer is_monitoring_term_size = false;
 
     try displayIntroScreen();
+    if (shouldQuit()) return;
     try term.pressEnterToContinue();
 }
 

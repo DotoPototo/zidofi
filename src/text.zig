@@ -40,5 +40,6 @@ pub fn testLigatures() !void {
     }
     try writers.flushWriterBuffer();
 
+    if (app.shouldQuit()) return;
     try term.pressEnterToContinue();
 }

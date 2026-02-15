@@ -27,12 +27,13 @@ pub fn printSpaces(count: usize) !void {
 pub fn printCentered(string: []const u8) !void {
     const padding = if (term.term_size.width > string.len) (term.term_size.width - string.len) / 2 else 0;
     try printSpaces(padding);
-    try stdout.print("{s}\n", .{string});
+    try stdout.writeAll(string);
+    try stdout.writeAll("\n");
 }
 
 // MARK: Buffered Writer
 pub fn writeBufferedFrame(data: []const u8) !void {
-    try stdout.print("{s}", .{data});
+    try stdout.writeAll(data);
 }
 
 pub fn writeFormattedBufferedFrame(comptime fmt: []const u8, args: anytype) !void {

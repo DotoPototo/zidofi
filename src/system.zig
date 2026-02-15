@@ -1,11 +1,9 @@
 const std = @import("std");
 const writers = @import("writers.zig");
 
-const os = std.os;
 const io = std.io;
 const mem = std.mem;
 const Thread = std.Thread;
-const Mutex = std.Thread.Mutex;
 const Atomic = std.atomic.Value;
 
 const is_darwin = @import("builtin").target.os.tag == .macos;
@@ -15,17 +13,21 @@ const is_darwin = @import("builtin").target.os.tag == .macos;
 var memoryTracker: PeakMemoryTracker = undefined;
 var cpuTracker: PeakCPUTracker = undefined;
 var trackerThread: Thread = undefined;
+var tracker_started: bool = false;
 
 pub fn initSystemTracker() !void {
     memoryTracker = PeakMemoryTracker.init();
     cpuTracker = PeakCPUTracker.init();
     trackerThread = try std.Thread.spawn(.{}, systemTrackerThread, .{ &memoryTracker, &cpuTracker });
+    tracker_started = true;
 }
 
 pub fn stopSystemTrackers() void {
+    if (!tracker_started) return;
     memoryTracker.stop();
     cpuTracker.stop();
     trackerThread.join();
+    tracker_started = false;
 }
 
 fn systemTrackerThread(memory_tracker: *PeakMemoryTracker, cpu_tracker: *PeakCPUTracker) !void {
@@ -62,23 +64,18 @@ pub const MemoryInfo = struct {
 const PeakMemoryTracker = struct {
     peak_physical: Atomic(usize),
     stop_flag: Atomic(bool),
-    mutex: Mutex,
 
     fn init() PeakMemoryTracker {
         return .{
             .peak_physical = Atomic(usize).init(0),
             .stop_flag = Atomic(bool).init(false),
-            .mutex = .{},
         };
     }
 
     fn updatePeaks(self: *PeakMemoryTracker, current: MemoryInfo) void {
-        self.mutex.lock();
-        defer self.mutex.unlock();
-
-        const peak_physical = self.peak_physical.load(.acquire);
+        const peak_physical = self.peak_physical.load(.monotonic);
         if (current.physical_memory > peak_physical) {
-            _ = self.peak_physical.store(current.physical_memory, .monotonic);
+            self.peak_physical.store(current.physical_memory, .release);
         }
     }
 
@@ -122,11 +119,7 @@ fn getDarwinMemoryUsage() !MemoryInfo {
 }
 
 fn getLinuxMemoryUsage() !MemoryInfo {
-    const pid = os.linux.getpid();
-    const path = try std.fmt.allocPrint(std.heap.page_allocator, "/proc/{d}/statm", .{pid});
-    defer std.heap.page_allocator.free(path);
-
-    const file = try std.fs.openFileAbsolute(path, .{});
+    const file = try std.fs.openFileAbsolute("/proc/self/statm", .{});
     defer file.close();
 
     var buffer: [256]u8 = undefined;
@@ -134,7 +127,8 @@ fn getLinuxMemoryUsage() !MemoryInfo {
     const content = buffer[0..bytes_read];
 
     var iterator = mem.tokenizeScalar(u8, content, ' ');
-    const rss_pages = try std.fmt.parseInt(usize, iterator.next().?, 10);
+    _ = iterator.next() orelse return error.InvalidMemoryInfo; // skip 'size' (total virtual memory)
+    const rss_pages = try std.fmt.parseInt(usize, iterator.next() orelse return error.InvalidMemoryInfo, 10);
 
     const page_size = std.heap.pageSize();
 
@@ -155,22 +149,17 @@ const PeakCPUTracker = struct {
     last_cpu_info: CPUInfo,
     peak_cpu_usage: Atomic(f64),
     stop_flag: Atomic(bool),
-    mutex: Mutex,
 
     fn init() PeakCPUTracker {
         return .{
             .last_cpu_info = CPUInfo{ .user = 0, .system = 0, .idle = 0 },
             .peak_cpu_usage = Atomic(f64).init(0),
             .stop_flag = Atomic(bool).init(false),
-            .mutex = .{},
         };
     }
 
     fn updatePeakCPUUsage(self: *PeakCPUTracker) !void {
         const current_cpu_info = try getCPUInfo();
-
-        self.mutex.lock();
-        defer self.mutex.unlock();
 
         const user_diff = current_cpu_info.user - self.last_cpu_info.user;
         const system_diff = current_cpu_info.system - self.last_cpu_info.system;
@@ -179,9 +168,9 @@ const PeakCPUTracker = struct {
         const total_diff = user_diff + system_diff + idle_diff;
         const usage = if (total_diff > 0) @as(f64, @floatFromInt(user_diff + system_diff)) / @as(f64, @floatFromInt(total_diff)) else 0;
 
-        const current_peak = self.peak_cpu_usage.load(.acquire);
+        const current_peak = self.peak_cpu_usage.load(.monotonic);
         if (usage > current_peak) {
-            _ = self.peak_cpu_usage.store(usage, .monotonic);
+            self.peak_cpu_usage.store(usage, .release);
         }
 
         self.last_cpu_info = current_cpu_info;

@@ -8,15 +8,27 @@ const MAX_COLOR = 256;
 
 pub var foreground_colors: [MAX_COLOR][]u8 = undefined;
 pub var background_colors: [MAX_COLOR][]u8 = undefined;
+var colors_initialized: u16 = 0;
 
 // MARK: Colour Setup
 
-pub fn initColors() void {
-    var color_index: u16 = 0;
-    while (color_index < MAX_COLOR) : (color_index += 1) {
-        foreground_colors[color_index] = std.fmt.allocPrint(app.ALLOCATOR, "{s}38;5;{d}m", .{ term.csi, color_index }) catch unreachable;
-        background_colors[color_index] = std.fmt.allocPrint(app.ALLOCATOR, "{s}48;5;{d}m", .{ term.csi, color_index }) catch unreachable;
+pub fn initColors() !void {
+    errdefer deinitColors();
+    while (colors_initialized < MAX_COLOR) {
+        foreground_colors[colors_initialized] = try std.fmt.allocPrint(app.ALLOCATOR, "{s}38;5;{d}m", .{ term.csi, colors_initialized });
+        errdefer app.ALLOCATOR.free(foreground_colors[colors_initialized]);
+        background_colors[colors_initialized] = try std.fmt.allocPrint(app.ALLOCATOR, "{s}48;5;{d}m", .{ term.csi, colors_initialized });
+        colors_initialized += 1;
     }
+}
+
+pub fn deinitColors() void {
+    var i: u16 = 0;
+    while (i < colors_initialized) : (i += 1) {
+        app.ALLOCATOR.free(foreground_colors[i]);
+        app.ALLOCATOR.free(background_colors[i]);
+    }
+    colors_initialized = 0;
 }
 
 // MARK: Test Functions
@@ -65,6 +77,7 @@ pub fn testTerminalColors() !void {
     // Print error-dithered truecolor gradient
     try drawDitheredGradient();
 
+    if (app.shouldQuit()) return;
     try term.pressEnterToContinue();
 }
 
