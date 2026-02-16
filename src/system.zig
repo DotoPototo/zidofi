@@ -1,4 +1,5 @@
 const std = @import("std");
+const config = @import("config.zig");
 const writers = @import("writers.zig");
 
 const io = std.io;
@@ -35,7 +36,7 @@ fn systemTrackerThread(memory_tracker: *PeakMemoryTracker, cpu_tracker: *PeakCPU
         const memory_info = try getMemoryUsage();
         memory_tracker.updatePeaks(memory_info);
         try cpu_tracker.updatePeakCPUUsage();
-        std.Thread.sleep(10 * std.time.ns_per_ms); // Check every 10ms
+        std.Thread.sleep(config.global.sample_interval_ms * std.time.ns_per_ms);
     }
 }
 

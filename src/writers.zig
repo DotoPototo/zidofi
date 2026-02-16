@@ -1,9 +1,8 @@
 const std = @import("std");
+const config = @import("config.zig");
 const term = @import("term.zig");
 
-const BUFFER_SIZE: usize = 4096;
-
-var stdout_buffer: [BUFFER_SIZE]u8 = undefined;
+var stdout_buffer: [config.output_buffer_size]u8 = undefined;
 var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
 pub const stdout: *std.Io.Writer = &stdout_writer.interface;
 

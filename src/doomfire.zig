@@ -1,4 +1,5 @@
 const std = @import("std");
+const config = @import("config.zig");
 const state = @import("state.zig");
 const system = @import("system.zig");
 const colours = @import("colours.zig");
@@ -163,10 +164,7 @@ pub fn run(allocator: std.mem.Allocator, random: std.Random) !void {
     var timer = try std.time.Timer.start();
 
     var loop_count: u32 = 0;
-    var loop_limit: u32 = 666;
-    if (state.endless_mode) {
-        loop_limit = std.math.maxInt(u32);
-    }
+    const loop_limit: u32 = if (config.global.endless) std.math.maxInt(u32) else config.global.frames;
     while (loop_count < loop_limit) : (loop_count += 1) {
         if (state.shouldQuit()) break;
         doFire(FIRE_WIDTH, FIRE_HEIGHT, &fire_buffer, random);
@@ -214,7 +212,7 @@ pub fn run(allocator: std.mem.Allocator, random: std.Random) !void {
         return;
     }
     const fps = @as(f64, @floatFromInt(loop_count)) / (@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_s);
-    if (fps < 5 or fps > 1000) {
+    if (fps < config.global.fps_min or fps > config.global.fps_max) {
         try writers.stdout.print("Results do not seem accurate - test may not have ran correctly\n", .{});
     }
     try writers.stdout.print("\x1b[38;5;70mAverage FPS: {d:.2}{s}\n", .{ fps, term.reset_color });

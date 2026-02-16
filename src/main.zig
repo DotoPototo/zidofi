@@ -1,4 +1,5 @@
 const std = @import("std");
+const config = @import("config.zig");
 const writers = @import("writers.zig");
 const term = @import("term.zig");
 const system = @import("system.zig");
@@ -23,6 +24,8 @@ pub fn main() !void {
     });
     const random = prng.random();
 
+    config.global = config.parseArgs(allocator) catch std.process.exit(1);
+
     defer complete(allocator) catch {};
     try initialise(allocator);
 
@@ -41,8 +44,6 @@ fn complete(allocator: std.mem.Allocator) !void {
 // MARK: Initialisation
 
 fn initialise(allocator: std.mem.Allocator) !void {
-    try checkArgs(allocator);
-
     try initSignalHandlers();
     try system.initSystemTracker();
 
@@ -52,17 +53,6 @@ fn initialise(allocator: std.mem.Allocator) !void {
     try runIntroScreen();
     try colours.testTerminalColors();
     try text.testLigatures();
-}
-
-fn checkArgs(allocator: std.mem.Allocator) !void {
-    var args = try std.process.argsWithAllocator(allocator);
-    defer args.deinit();
-
-    while (args.next()) |arg| {
-        if (std.mem.eql(u8, arg, "--endless")) {
-            state.endless_mode = true;
-        }
-    }
 }
 
 // MARK: Signal Handling

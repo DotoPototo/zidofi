@@ -1,6 +1,6 @@
 const std = @import("std");
+const config = @import("config.zig");
 const writers = @import("writers.zig");
-const state = @import("state.zig");
 
 pub const TermSize = struct {
     width: u16,
@@ -99,15 +99,13 @@ fn getTermSize(file: std.fs.File) !TermSize {
 
 pub fn outputTerminalSize() !void {
     try writers.writeFormattedBufferedFrame("Terminal size: {d}x{d}\n\n", .{ term_size.width, term_size.height });
-    if (term_size.width != 160 or term_size.height != 48) {
-        try writers.writeBufferedFrame("The recommended terminal size is 160x48 for the DOOM fire test\n\n");
+    if (term_size.width != config.global.recommended_width or term_size.height != config.global.recommended_height) {
+        try writers.writeFormattedBufferedFrame("The recommended terminal size is {d}x{d} for the DOOM fire test\n\n", .{ config.global.recommended_width, config.global.recommended_height });
     }
     try writers.flushWriterBuffer();
 }
 
 // MARK: Header
-
-const APP_VERSION = "0.1";
 
 pub fn writeHeader() !void {
     const headerWidth: u16 = 40;
@@ -131,8 +129,8 @@ pub fn writeHeader() !void {
     try writers.writeBufferedFrame("\n\n");
     try writers.flushWriterBuffer();
 
-    try writers.printCentered("🔥 Zig Doom Fire - Terminal Tester & Benchmark Tool v" ++ APP_VERSION ++ "🔥\n\n");
-    if (state.endless_mode) {
+    try writers.printCentered("🔥 Zig Doom Fire - Terminal Tester & Benchmark Tool v" ++ config.app_version ++ "🔥\n\n");
+    if (config.global.endless) {
         try writers.print("\x1b[38;5;196m"); // Red
         try writers.printCentered("Endless mode enabled - press Ctrl+C to exit\n\n");
     }
