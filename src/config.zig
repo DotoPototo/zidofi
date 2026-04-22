@@ -1,6 +1,7 @@
 const std = @import("std");
+const Io = std.Io;
 
-pub const app_version = "0.1";
+pub const app_version = "0.0.3";
 pub const output_buffer_size: usize = 4096;
 
 pub const Config = struct {
@@ -22,36 +23,29 @@ pub const Config = struct {
 
 pub var global: Config = .{};
 
-pub fn parseArgs(allocator: std.mem.Allocator) !Config {
+pub fn parseArgs(io: Io, args: std.process.Args) Config {
     var config = Config{};
-    var args = try std.process.argsWithAllocator(allocator);
-    defer args.deinit();
+    var iter = args.iterate();
+    _ = iter.next(); // skip program name
 
-    _ = args.next(); // skip program name
-
-    while (args.next()) |arg| {
+    while (iter.next()) |arg| {
         if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
-            printUsage();
+            printStdout(io, USAGE);
             std.process.exit(0);
         } else if (std.mem.eql(u8, arg, "--version") or std.mem.eql(u8, arg, "-v")) {
-            printVersion();
+            printStdout(io, "zidofi " ++ app_version ++ "\n");
             std.process.exit(0);
         } else if (std.mem.eql(u8, arg, "--endless")) {
             config.endless = true;
         } else if (std.mem.eql(u8, arg, "--frames")) {
-            const value = args.next() orelse {
-                exitWithError("Error: --frames requires a value\n");
-            };
-            config.frames = std.fmt.parseInt(u32, value, 10) catch {
-                exitWithError("Error: --frames value must be a positive integer\n");
-            };
-            if (config.frames == 0) {
-                exitWithError("Error: --frames must be greater than 0\n");
-            }
+            const value = iter.next() orelse exitWithError(io, "Error: --frames requires a value\n");
+            config.frames = std.fmt.parseInt(u32, value, 10) catch
+                exitWithError(io, "Error: --frames value must be a positive integer\n");
+            if (config.frames == 0) exitWithError(io, "Error: --frames must be greater than 0\n");
         } else {
-            printStderr("Error: unknown option '");
-            printStderr(arg);
-            printStderr("'\nTry 'zidofi --help' for usage information.\n");
+            printStderr(io, "Error: unknown option '");
+            printStderr(io, arg);
+            printStderr(io, "'\nTry 'zidofi --help' for usage information.\n");
             std.process.exit(1);
         }
     }
@@ -59,41 +53,32 @@ pub fn parseArgs(allocator: std.mem.Allocator) !Config {
     return config;
 }
 
-fn printUsage() void {
-    printStdout(
-        "ZiDoFi - Zig Doom Fire - Terminal Tester & Benchmark Tool v" ++ app_version ++ "\n" ++
-            "\n" ++
-            "Usage: zidofi [options]\n" ++
-            "\n" ++
-            "Options:\n" ++
-            "  --frames N    Set benchmark length in frames (default: 666)\n" ++
-            "  --endless     Run indefinitely (overrides --frames)\n" ++
-            "  --help, -h    Show this help message\n" ++
-            "  --version, -v Show version\n",
-    );
-}
+const USAGE =
+    "ZiDoFi - Zig Doom Fire - Terminal Tester & Benchmark Tool v" ++ app_version ++ "\n" ++
+    "\n" ++
+    "Usage: zidofi [options]\n" ++
+    "\n" ++
+    "Options:\n" ++
+    "  --frames N    Set benchmark length in frames (default: 666)\n" ++
+    "  --endless     Run indefinitely (overrides --frames)\n" ++
+    "  --help, -h    Show this help message\n" ++
+    "  --version, -v Show version\n";
 
-fn printVersion() void {
-    printStdout("zidofi " ++ app_version ++ "\n");
-}
-
-fn exitWithError(msg: []const u8) noreturn {
-    printStderr(msg);
+fn exitWithError(io: Io, msg: []const u8) noreturn {
+    printStderr(io, msg);
     std.process.exit(1);
 }
 
-fn printStdout(msg: []const u8) void {
-    var buf: [4096]u8 = undefined;
-    var writer = std.fs.File.stdout().writer(&buf);
-    const w: *std.Io.Writer = &writer.interface;
-    w.writeAll(msg) catch {};
+fn printStdout(io: Io, msg: []const u8) void {
+    var buf: [output_buffer_size]u8 = undefined;
+    var w = Io.File.stdout().writerStreaming(io, &buf);
+    w.interface.writeAll(msg) catch {};
     w.flush() catch {};
 }
 
-fn printStderr(msg: []const u8) void {
-    var buf: [4096]u8 = undefined;
-    var writer = std.fs.File.stderr().writer(&buf);
-    const w: *std.Io.Writer = &writer.interface;
-    w.writeAll(msg) catch {};
+fn printStderr(io: Io, msg: []const u8) void {
+    var buf: [output_buffer_size]u8 = undefined;
+    var w = Io.File.stderr().writerStreaming(io, &buf);
+    w.interface.writeAll(msg) catch {};
     w.flush() catch {};
 }

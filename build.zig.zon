@@ -1,8 +1,8 @@
 .{
     .name = .doomfire,
-    .version = "0.0.2",
+    .version = "0.0.3",
     .fingerprint = 0xade7958438f9bb6e, // Changing this has security and trust implications.
-    .minimum_zig_version = "0.15.1",
+    .minimum_zig_version = "0.16.0",
     .dependencies = .{},
     .paths = .{
         "build.zig",

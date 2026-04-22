@@ -35,10 +35,8 @@ pub fn testLigatures() !void {
         "𝘈𝘉𝘊𝘋𝘌𝘍𝘎𝘏𝘐𝘑𝘒𝘓𝘔𝘕𝘖𝘗𝘘𝘙𝘚𝘛𝘜𝘝𝘞𝘟𝘠𝘡\n\n",
     };
 
-    for (ligature_tests) |ligtest| {
-        try writers.writeBufferedFrame(ligtest);
-    }
-    try writers.flushWriterBuffer();
+    for (ligature_tests) |ligtest| try writers.write(ligtest);
+    try writers.flush();
 
     if (state.shouldQuit()) return;
     try term.pressEnterToContinue();

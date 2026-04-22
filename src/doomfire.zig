@@ -1,4 +1,7 @@
 const std = @import("std");
+const Io = std.Io;
+
+const app = @import("main.zig");
 const config = @import("config.zig");
 const state = @import("state.zig");
 const system = @import("system.zig");
@@ -12,7 +15,7 @@ const FIRE_WHITE: u8 = FIRE_COLOURS.len - 1;
 const PIXEL_CHAR = "▀";
 
 fn printFirePixel(fg_color: usize, bg_color: usize) !void {
-    try writers.writeFormattedBufferedFrame("\x1b[38;5;{d}m\x1b[48;5;{d}m{s}\x1b[0m", .{ fg_color, bg_color, PIXEL_CHAR });
+    try writers.print("\x1b[38;5;{d}m\x1b[48;5;{d}m{s}\x1b[0m", .{ fg_color, bg_color, PIXEL_CHAR });
 }
 
 // MARK: Fire Palette
@@ -23,34 +26,16 @@ pub fn printFirePalette() !void {
 
     try term.writeHeader();
     try writers.printCentered("\x1b[38;5;208mThe following screen will display the DOOM fire algorithm - please wait for it to finish!\n\n");
-    try writers.print(term.reset_color);
+    try writers.write(term.reset_color);
 
-    // Print fire palette
-    try writers.writeBufferedFrame("Fire palette:\n");
-    for (FIRE_COLOURS) |color| {
-        try colours.printColorBlock(color);
-    }
-    try writers.flushWriterBuffer();
-    try writers.writeBufferedFrame("\n\n");
-
-    try writers.writeBufferedFrame("Half height pixel character:\n");
-    try writers.writeFormattedBufferedFrame("{s}", .{PIXEL_CHAR});
-    try writers.writeBufferedFrame("\n\n");
-    try writers.flushWriterBuffer();
-
-    try writers.writeBufferedFrame("Half height pixel fire on white:\n");
-    for (FIRE_COLOURS) |color| {
-        try printFirePixel(color, 255);
-    }
-    try writers.writeBufferedFrame("\n\n");
-    try writers.flushWriterBuffer();
-
-    try writers.writeBufferedFrame("Half height pixel fire on black:\n");
-    for (FIRE_COLOURS) |color| {
-        try printFirePixel(color, 0);
-    }
-    try writers.writeBufferedFrame("\n\n");
-    try writers.flushWriterBuffer();
+    try writers.write("Fire palette:\n");
+    for (FIRE_COLOURS) |color| try colours.printColorBlock(color);
+    try writers.write("\n\nHalf height pixel character:\n" ++ PIXEL_CHAR ++ "\n\nHalf height pixel fire on white:\n");
+    for (FIRE_COLOURS) |color| try printFirePixel(color, 255);
+    try writers.write("\n\nHalf height pixel fire on black:\n");
+    for (FIRE_COLOURS) |color| try printFirePixel(color, 0);
+    try writers.write("\n\n");
+    try writers.flush();
 
     if (state.shouldQuit()) return;
     try term.pressEnterToContinue();
@@ -84,7 +69,7 @@ const DisplayBuffer = struct {
     }
 
     fn flush(self: *DisplayBuffer) !void {
-        try writers.print(self.buffer[0..self.length]);
+        try writers.write(self.buffer[0..self.length]);
         self.reset();
     }
 };
@@ -103,34 +88,32 @@ fn createDisplayBuffer(allocator: std.mem.Allocator) !DisplayBuffer {
 
 // MARK: Fire Algorithm
 
-fn doFire(FIRE_WIDTH: u32, FIRE_HEIGHT: u32, fire_buffer: *[]u8, random: std.Random) void {
+fn doFire(FIRE_WIDTH: u32, FIRE_HEIGHT: u32, fire_buffer: []u8) void {
     var fire_x: u32 = 0;
     while (fire_x < FIRE_WIDTH) : (fire_x += 1) {
         var fire_y: u32 = 1;
         while (fire_y < FIRE_HEIGHT) : (fire_y += 1) {
             const source_index: u32 = fire_y * FIRE_WIDTH + fire_x;
-            spreadFire(source_index, FIRE_WIDTH, fire_buffer, random);
+            spreadFire(source_index, FIRE_WIDTH, fire_buffer);
         }
     }
 }
 
-fn spreadFire(source_index: u32, FIRE_WIDTH: u32, fire_buffer: *[]u8, random: std.Random) void {
-    const pixel = fire_buffer.*[source_index];
+fn spreadFire(source_index: u32, FIRE_WIDTH: u32, fire_buffer: []u8) void {
+    const pixel = fire_buffer[source_index];
     if (pixel == 0) {
-        fire_buffer.*[source_index - FIRE_WIDTH] = 0;
+        fire_buffer[source_index - FIRE_WIDTH] = 0;
     } else {
-        const random_index: u8 = random.intRangeAtMost(u8, 0, 3);
+        const random_index: u8 = app.random.intRangeAtMost(u8, 0, 3);
         var destination: u32 = source_index - random_index + 1;
-        if (destination < FIRE_WIDTH) {
-            destination = FIRE_WIDTH;
-        }
-        fire_buffer.*[destination - FIRE_WIDTH] = pixel - (random_index & 1);
+        if (destination < FIRE_WIDTH) destination = FIRE_WIDTH;
+        fire_buffer[destination - FIRE_WIDTH] = pixel - (random_index & 1);
     }
 }
 
-pub fn run(allocator: std.mem.Allocator, random: std.Random) !void {
-    var display = try createDisplayBuffer(allocator);
-    defer display.deinit(allocator);
+pub fn run() !void {
+    var display = try createDisplayBuffer(app.gpa);
+    defer display.deinit(app.gpa);
 
     // Doom fire sizes
     const FIRE_WIDTH: u32 = term.term_size.width;
@@ -138,43 +121,40 @@ pub fn run(allocator: std.mem.Allocator, random: std.Random) !void {
     const FIRE_SIZE: u32 = FIRE_WIDTH * FIRE_HEIGHT;
     const FIRE_LAST_ROW: u32 = (FIRE_HEIGHT - 1) * FIRE_WIDTH;
 
-    // Doom fire buffers
-    var fire_buffer: []u8 = try allocator.alloc(u8, FIRE_SIZE);
-    defer allocator.free(fire_buffer);
+    // Doom fire buffer
+    var fire_buffer: []u8 = try app.gpa.alloc(u8, FIRE_SIZE);
+    defer app.gpa.free(fire_buffer);
 
     // Initialize fire buffer (defaults to black)
     @memset(fire_buffer, FIRE_BLACK);
 
     // Last row of fire is white aka fire source
-    var buf_index: u32 = 0;
-    while (buf_index < FIRE_WIDTH) : (buf_index += 1) {
-        fire_buffer[FIRE_LAST_ROW + buf_index] = FIRE_WHITE;
-    }
+    @memset(fire_buffer[FIRE_LAST_ROW .. FIRE_LAST_ROW + FIRE_WIDTH], FIRE_WHITE);
 
     // Ensure terminal is in correct mode
     try term.altScreenOn();
 
     // Setup initial frame
-    const init_frame = try std.fmt.allocPrint(allocator, "{s}{s}{s}", .{ term.cursor_home, colours.background_colors[FIRE_COLOURS[FIRE_BLACK]], colours.foreground_colors[FIRE_COLOURS[FIRE_BLACK]] });
-    defer allocator.free(init_frame);
+    const init_frame = try std.fmt.allocPrint(app.arena, "{s}{s}{s}", .{
+        term.cursor_home,
+        colours.background_colors[FIRE_COLOURS[FIRE_BLACK]],
+        colours.foreground_colors[FIRE_COLOURS[FIRE_BLACK]],
+    });
 
-    var prev_pixel_foreground: u8 = 255;
-    var prev_pixel_background: u8 = 255;
-
-    var timer = try std.time.Timer.start();
+    const start = Io.Timestamp.now(app.io, .awake);
 
     var loop_count: u32 = 0;
     const loop_limit: u32 = if (config.global.endless) std.math.maxInt(u32) else config.global.frames;
     while (loop_count < loop_limit) : (loop_count += 1) {
         if (state.shouldQuit()) break;
-        doFire(FIRE_WIDTH, FIRE_HEIGHT, &fire_buffer, random);
+        doFire(FIRE_WIDTH, FIRE_HEIGHT, fire_buffer);
 
         display.reset();
         display.append(init_frame);
 
         // Set the first pixel to be an 'invalid' colour to force set the colour
-        prev_pixel_foreground = 255;
-        prev_pixel_background = 255;
+        var prev_pixel_foreground: u8 = 255;
+        var prev_pixel_background: u8 = 255;
 
         // Display the fire
         var frame_y: u32 = 0;
@@ -202,22 +182,23 @@ pub fn run(allocator: std.mem.Allocator, random: std.Random) !void {
     }
 
     if (state.shouldQuit()) return;
+    try writers.flush();
+    const elapsed_us = start.durationTo(.now(app.io, .awake)).toMicroseconds();
 
     // Reset terminal and display results
     try term.resetScreen();
     try term.altScreenOn();
-    const elapsed = timer.lap();
-    if (elapsed == 0) {
-        try writers.stdout.print("Results do not seem accurate - elapsed time was zero\n", .{});
+    if (elapsed_us == 0) {
+        try writers.write("Results do not seem accurate - elapsed time was zero\n");
         return;
     }
-    const fps = @as(f64, @floatFromInt(loop_count)) / (@as(f64, @floatFromInt(elapsed)) / std.time.ns_per_s);
+    const fps: f64 = @as(f64, @floatFromInt(loop_count)) * std.time.us_per_s / @as(f64, @floatFromInt(elapsed_us));
     if (fps < config.global.fps_min or fps > config.global.fps_max) {
-        try writers.stdout.print("Results do not seem accurate - test may not have ran correctly\n", .{});
+        try writers.write("Results do not seem accurate - test may not have ran correctly\n");
     }
-    try writers.stdout.print("\x1b[38;5;70mAverage FPS: {d:.2}{s}\n", .{ fps, term.reset_color });
-    try writers.stdout.print("Visual results may vary depending on terminal refresh capabilities\n\n", .{});
-    try system.printSystemUsage(false);
+    try writers.print("\x1b[38;5;70mAverage FPS: {d:.2}{s}\n", .{ fps, term.reset_color });
+    try writers.write("Visual results may vary depending on terminal refresh capabilities\n\n");
+    try system.printPeakUsage();
     if (state.shouldQuit()) return;
     try term.pressEnterToContinue();
 }

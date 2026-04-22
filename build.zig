@@ -4,13 +4,24 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const exe = b.addExecutable(.{
-        .name = "zidofi",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
+    const root_module = b.createModule(.{
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    if (target.result.os.tag.isDarwin()) {
+        const translate_c = b.addTranslateC(.{
+            .root_source_file = b.path("src/mach.h"),
             .target = target,
             .optimize = optimize,
-        }),
+        });
+        root_module.addImport("mach_c", translate_c.createModule());
+    }
+
+    const exe = b.addExecutable(.{
+        .name = "zidofi",
+        .root_module = root_module,
     });
 
     b.installArtifact(exe);
